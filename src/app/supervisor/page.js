@@ -1,390 +1,324 @@
 "use client";
 import { useState, useEffect } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 
-const IMAGENES_FONDO = [
-  "https://images.unsplash.com/photo-1668375827097-a867c6e72c9f?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-  "https://images.unsplash.com/photo-1692606280456-b138e165b11a?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-  "https://plus.unsplash.com/premium_photo-1661762342798-f87a2414d66c?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-];
+const COLORES_PIE = ['#1C4D2E', '#C22821', '#F59E0B', '#3B82F6', '#8B5CF6', '#10B981', '#F43F5E', '#14B8A6'];
 
+// Importamos el catálogo para poder "traducir" el palet al nombre del cliente
 const CATALOGO_CONFIGURACIONES = [
-  { id: '1', cliente: "Bakkavor", palet: "CHEP 1x1.2 (Caja EPS 24603)", cajas: 50, lechugas: 18 },
-  { id: '2', cliente: "Coop Norge", palet: "EURO CHEP 0.8x1.2 (EPS 15604)", cajas: 56, lechugas: 10 },
-  { id: '3', cliente: "Coop Norge", palet: "EURO CHEP 0.8x1.2 (EPS 21604)", cajas: 44, lechugas: 18 },
-  { id: '4', cliente: "Ametller", palet: "EURO OFICIAL 120x80 (EPS 156)", cajas: 52, lechugas: 9 },
-  { id: '5', cliente: "Fruktservice", palet: "EURO OFICIAL (Cartón)", cajas: 40, lechugas: 8 },
-  { id: '6', cliente: "SIA RIMI", palet: "EURO 5T SUELO (IFCO 6413)", cajas: 60, lechugas: 10 },
-  { id: '7', cliente: "SIA RIMI", palet: "EURO 5T SUELO (IFCO 6415)", cajas: 60, lechugas: 15 },
-  { id: '8', cliente: "Primaflor", palet: "CHEP 1x1.2 (Azul Primaflor)", cajas: 40, lechugas: 100 },
-  { id: '9', cliente: "Mimaflor", palet: "EURO CHEP 0.8x1.2 (CPR F6418)", cajas: 52, lechugas: 10 },
-  { id: '10', cliente: "RBC Pulpi", palet: "CHEP 1x1.2 (Plástico Blanco)", cajas: 30, lechugas: 1 }
+  { id: '1', cliente: "Bakkavor", palet: "CHEP 1x1.2 (Caja EPS 24603)", cajas: 50 },
+  { id: '2', cliente: "Coop Norge", palet: "EURO CHEP 0.8x1.2 (EPS 15604)", cajas: 56 },
+  { id: '3', cliente: "Coop Norge", palet: "EURO CHEP 0.8x1.2 (EPS 21604)", cajas: 44 },
+  { id: '4', cliente: "Ametller", palet: "EURO OFICIAL 120x80 (EPS 156)", cajas: 52 },
+  { id: '5', cliente: "Fruktservice", palet: "EURO OFICIAL (Cartón)", cajas: 40 },
+  { id: '6', cliente: "SIA RIMI", palet: "EURO 5T SUELO (IFCO 6413)", cajas: 60 },
+  { id: '7', cliente: "SIA RIMI", palet: "EURO 5T SUELO (IFCO 6415)", cajas: 60 },
+  { id: '8', cliente: "Primaflor", palet: "CHEP 1x1.2 (Azul Primaflor)", cajas: 40 },
+  { id: '9', cliente: "Mimaflor", palet: "EURO CHEP 0.8x1.2 (CPR F6418)", cajas: 52 },
+  { id: '10', cliente: "RBC Pulpi", palet: "CHEP 1x1.2 (Plástico Blanco)", cajas: 30 }
 ];
 
-const PALETERO_BASE = { nomina: '', ticket: '', pedido: '', configuracion: CATALOGO_CONFIGURACIONES[0] };
+// Función ayudante para obtener el cliente
+const getClientePorPalet = (nombrePalet) => {
+  const config = CATALOGO_CONFIGURACIONES.find(c => c.palet === nombrePalet);
+  return config ? config.cliente : nombrePalet; // Si es un dato viejo de prueba, muestra el raw
+};
 
-export default function Home() {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [step, setStep] = useState(1); 
-  const [bgIndex, setBgIndex] = useState(0);
-  const [paletero, setPaletero] = useState(PALETERO_BASE);
-  const [trabajadores, setTrabajadores] = useState([]);
-  const [nuevoTrab, setNuevoTrab] = useState({ nombre: '', nomina: '', ticket: '' });
+export default function SupervisorDashboard() {
+  const [datos, setDatos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // ESTADOS DE LOS FILTROS
+  const [filtroFechaInicio, setFiltroFechaInicio] = useState('');
+  const [filtroFechaFin, setFiltroFechaFin] = useState('');
+  const [filtroPaletero, setFiltroPaletero] = useState('TODOS');
+  const [filtroPedido, setFiltroPedido] = useState('TODOS');
+  const [filtroCliente, setFiltroCliente] = useState('TODOS');
 
-  const [isOnline, setIsOnline] = useState(true);
-  const [pendientesSync, setPendientesSync] = useState(0);
+  const fetchDatos = async () => {
+    try {
+      const res = await fetch('/api/tracker');
+      const json = await res.json();
+      if (json.success) setDatos(json.data);
+    } catch (error) { console.error("Error cargando dashboard:", error); }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const memStep = localStorage.getItem('pf_step');
-    const memPaletero = localStorage.getItem('pf_paletero');
-    const memTrabajadores = localStorage.getItem('pf_trabajadores');
-    
-    if (memStep) setStep(JSON.parse(memStep));
-    if (memPaletero) setPaletero(JSON.parse(memPaletero));
-    if (memTrabajadores) setTrabajadores(JSON.parse(memTrabajadores));
-
-    setIsOnline(navigator.onLine);
-    const queueGuardada = JSON.parse(localStorage.getItem('pf_sync_queue') || '[]');
-    setPendientesSync(queueGuardada.length);
-
-    const handleOnline = () => {
-      setIsOnline(true);
-      sincronizarColaMongoDB(); 
-    };
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    setIsLoaded(true);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
+    fetchDatos();
+    const interval = setInterval(fetchDatos, 5000); 
+    return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('pf_step', JSON.stringify(step));
-      localStorage.setItem('pf_paletero', JSON.stringify(paletero));
-      localStorage.setItem('pf_trabajadores', JSON.stringify(trabajadores));
-    }
-  }, [step, paletero, trabajadores, isLoaded]);
+  // Listas únicas para los selectores (Ahora traduce a Clientes Reales)
+  const paleterosUnicos = ['TODOS', ...new Set(datos.map(d => d.paletero_nomina))];
+  const pedidosUnicos = ['TODOS', ...new Set(datos.map(d => d.pedido))];
+  const clientesUnicos = ['TODOS', ...new Set(datos.map(d => getClientePorPalet(d.tipo_palet)))];
 
-  useEffect(() => {
-    const intervalo = setInterval(() => {
-      setBgIndex((prev) => (prev + 1) % IMAGENES_FONDO.length);
-    }, 5000);
-    return () => clearInterval(intervalo);
-  }, []);
-
-  const encolarPeticion = (payload) => {
-    const queueActual = JSON.parse(localStorage.getItem('pf_sync_queue') || '[]');
-    queueActual.push(payload);
-    localStorage.setItem('pf_sync_queue', JSON.stringify(queueActual));
-    setPendientesSync(queueActual.length);
-  };
-
-  const sincronizarColaMongoDB = async () => {
-    const queueActual = JSON.parse(localStorage.getItem('pf_sync_queue') || '[]');
-    if (queueActual.length === 0) return;
-
-    const nuevaCola = [...queueActual];
-    for (let i = 0; i < queueActual.length; i++) {
-      try {
-        const res = await fetch('/api/tracker', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(queueActual[i])
-        });
-        if (res.ok) {
-          nuevaCola.shift(); 
-        } else {
-          break; 
-        }
-      } catch (err) {
-        break; 
-      }
-    }
-    localStorage.setItem('pf_sync_queue', JSON.stringify(nuevaCola));
-    setPendientesSync(nuevaCola.length);
-  };
-
-  const handleConfigChange = (e) => {
-    const configSeleccionada = CATALOGO_CONFIGURACIONES.find(c => c.id === e.target.value);
-    setPaletero({ ...paletero, configuracion: configSeleccionada });
-  };
-
-  const handlePaleteroSubmit = async (e) => {
-    e.preventDefault();
-    if (paletero.nomina && paletero.ticket && paletero.pedido) {
-      if (isOnline) {
-        try {
-          const respuesta = await fetch(`/api/tracker?nomina=${paletero.nomina}&pedido=${paletero.pedido}`);
-          const info = await respuesta.json();
-          if (info.success && info.data.length > 0) {
-            const cuadrillaMap = {};
-            info.data.forEach(reg => {
-              if (!cuadrillaMap[reg.trabajador_nomina]) {
-                cuadrillaMap[reg.trabajador_nomina] = {
-                  id: reg._id, nombre: reg.trabajador_nombre, nomina: reg.trabajador_nomina, ticket: reg.trabajador_ticket,
-                  conteos: {}
-                };
-              }
-              const configObj = CATALOGO_CONFIGURACIONES.find(c => c.palet === reg.tipo_palet) || CATALOGO_CONFIGURACIONES[0];
-              cuadrillaMap[reg.trabajador_nomina].conteos[configObj.id] = reg.gavetas;
-            });
-            setTrabajadores(Object.values(cuadrillaMap));
-          }
-        } catch (error) { console.warn("Modo offline en inicio de turno."); }
-      }
-      setStep(2);
-    }
-  };
-
-  const updateGavetas = async (id, cantidad) => {
-    const configIdActual = paletero.configuracion.id;
-    let trabajadorActualizado = null;
-    let gavetasActualesCalculadas = 0;
+  // ==========================================
+  // MOTOR DE FILTROS
+  // ==========================================
+  const datosFiltrados = datos.filter(d => {
+    const pasaPaletero = filtroPaletero === 'TODOS' || d.paletero_nomina === filtroPaletero;
+    const pasaPedido = filtroPedido === 'TODOS' || d.pedido === filtroPedido;
     
-    setTrabajadores(trabajadores.map(t => {
-      if (t.id === id) {
-        const gavetasAnteriores = t.conteos[configIdActual] || 0;
-        let nuevoTotal = gavetasAnteriores + cantidad;
-        if (nuevoTotal < 0) nuevoTotal = 0;
-        
-        gavetasActualesCalculadas = nuevoTotal;
-        trabajadorActualizado = { ...t, conteos: { ...t.conteos, [configIdActual]: nuevoTotal } };
-        return trabajadorActualizado;
-      }
-      return t;
-    }));
-    
-    if (trabajadorActualizado) {
-      const payloadEnvio = { 
-        paletero: { ...paletero, tipoPalet: paletero.configuracion.palet }, 
-        trabajador: trabajadorActualizado, 
-        gavetasActuales: gavetasActualesCalculadas,
-        capacidad: paletero.configuracion.cajas
+    // Evaluamos contra el nombre real del cliente
+    const nombreClienteReal = getClientePorPalet(d.tipo_palet);
+    const pasaCliente = filtroCliente === 'TODOS' || nombreClienteReal === filtroCliente;
+
+    // Filtro de Fechas
+    const fechaDoc = d.createdAt ? new Date(d.createdAt) : new Date(parseInt(d._id.substring(0, 8), 16) * 1000);
+    fechaDoc.setHours(0,0,0,0);
+
+    let pasaFechaInicio = true;
+    let pasaFechaFin = true;
+
+    if (filtroFechaInicio) {
+      const fInicio = new Date(filtroFechaInicio + 'T00:00:00');
+      fInicio.setHours(0,0,0,0);
+      pasaFechaInicio = fechaDoc >= fInicio;
+    }
+    if (filtroFechaFin) {
+      const fFin = new Date(filtroFechaFin + 'T00:00:00');
+      fFin.setHours(0,0,0,0);
+      pasaFechaFin = fechaDoc <= fFin;
+    }
+
+    return pasaPaletero && pasaPedido && pasaCliente && pasaFechaInicio && pasaFechaFin;
+  });
+
+  const limpiarFiltros = () => {
+    setFiltroFechaInicio(''); setFiltroFechaFin('');
+    setFiltroPaletero('TODOS'); setFiltroPedido('TODOS'); setFiltroCliente('TODOS');
+  };
+
+  // ==========================================
+  // CÁLCULO DE KPIs
+  // ==========================================
+  const kpiTotalGavetas = datosFiltrados.reduce((acc, curr) => acc + curr.gavetas, 0);
+  const kpiTotalPalets = datosFiltrados.reduce((acc, curr) => acc + (curr.palets || 0), 0);
+  const kpiTrabajadoresUnicos = new Set(datosFiltrados.map(d => d.trabajador_nomina)).size;
+  const kpiPromedioGavetas = kpiTrabajadoresUnicos > 0 ? Math.round(kpiTotalGavetas / kpiTrabajadoresUnicos) : 0;
+
+  // ==========================================
+  // PREPARACIÓN DE DATOS PARA GRÁFICAS
+  // ==========================================
+  
+  const cuadrillasAgrupadas = datosFiltrados.reduce((acumulador, actual) => {
+    const llaveGroup = `Paletero-${actual.paletero_nomina}-Pedido-${actual.pedido}`;
+    if (!acumulador[llaveGroup]) {
+      acumulador[llaveGroup] = {
+        paletero: actual.paletero_nomina, pedido: actual.pedido, tiposPaletUnicos: new Set(),
+        totalGavetas: 0, trabajadoresMap: {} 
       };
-
-      try {
-        if (!navigator.onLine) throw new Error("Offline_Trigger"); 
-        const res = await fetch('/api/tracker', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payloadEnvio),
-        });
-        if (!res.ok) throw new Error("Server_Error");
-      } catch (error) { 
-        encolarPeticion(payloadEnvio);
-      }
     }
-  };
+    const groupRef = acumulador[llaveGroup];
+    groupRef.tiposPaletUnicos.add(actual.tipo_palet);
+    groupRef.totalGavetas += actual.gavetas;
 
-  const addTrabajador = (e) => {
-    e.preventDefault();
-    if (trabajadores.find(t => t.nomina === nuevoTrab.nomina)) return alert(`⚠️ La nómina ya está registrada.`);
-    if (nuevoTrab.nombre && nuevoTrab.nomina && nuevoTrab.ticket) {
-      setTrabajadores([...trabajadores, { ...nuevoTrab, id: Date.now(), conteos: {} }]);
-      setNuevoTrab({ nombre: '', nomina: '', ticket: '' }); 
+    if (!groupRef.trabajadoresMap[actual.trabajador_nomina]) {
+      groupRef.trabajadoresMap[actual.trabajador_nomina] = {
+        nombre: actual.trabajador_nombre, nomina: actual.trabajador_nomina, ticket: actual.trabajador_ticket,
+        produccion: [] 
+      };
     }
-  };
+    groupRef.trabajadoresMap[actual.trabajador_nomina].produccion.push({
+      id: actual._id, tipo_palet: actual.tipo_palet, gavetas: actual.gavetas, palets: actual.palets
+    });
+    return acumulador;
+  }, {});
 
-  const removeTrabajador = (id) => setTrabajadores(trabajadores.filter(t => t.id !== id));
+  const listaCuadrillas = Object.values(cuadrillasAgrupadas).map(c => ({
+    ...c,
+    tiposPaletArray: Array.from(c.tiposPaletUnicos),
+    trabajadoresDetallados: Object.values(c.trabajadoresMap).sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }));
 
-  const terminarTurno = () => {
-    if (pendientesSync > 0) {
-      return alert("⚠️ Tienes datos sin guardar en la nube. Conéctate a internet para sincronizar antes de cerrar el turno.");
-    }
-    if (window.confirm("¿Estás seguro de salir y cerrar este turno?")) {
-      setStep(1); 
-      setTrabajadores([]); 
-      setPaletero(PALETERO_BASE);
-      localStorage.removeItem('pf_step'); 
-      localStorage.removeItem('pf_paletero'); 
-      localStorage.removeItem('pf_trabajadores');
-      localStorage.removeItem('pf_sync_queue');
-    }
-  };
+  const datosGraficaBarras = listaCuadrillas.map(c => ({
+    nombre: `Pal: ${c.paletero}`, Gavetas: c.totalGavetas
+  }));
 
-  const totalGavetasGeneral = trabajadores.reduce((acc, curr) => {
-    return acc + Object.values(curr.conteos).reduce((sum, val) => sum + val, 0);
-  }, 0);
+  // DATOS PARA GRÁFICA DE PASTEL (AGRUPADOS POR CLIENTE REAL)
+  const gavetasPorClienteMap = datosFiltrados.reduce((acc, curr) => {
+    const nombreCliente = getClientePorPalet(curr.tipo_palet);
+    acc[nombreCliente] = (acc[nombreCliente] || 0) + curr.gavetas;
+    return acc;
+  }, {});
+  
+  const datosPie = Object.keys(gavetasPorClienteMap).map(key => ({
+    name: key, value: gavetasPorClienteMap[key]
+  }));
 
-  const resumenPaletsGlobales = CATALOGO_CONFIGURACIONES.map(conf => {
-    const totalGavetasTipo = trabajadores.reduce((acc, t) => acc + (t.conteos[conf.id] || 0), 0);
-    const paletsCompletos = Math.floor(totalGavetasTipo / conf.cajas);
-    return { ...conf, paletsCompletos };
-  }).filter(res => res.paletsCompletos > 0);
-
-  if (!isLoaded) return <div className="min-h-screen bg-black/90 flex items-center justify-center text-white font-bold italic">Inicializando Sistema Primaflor...</div>;
+  if (loading) return <div className="min-h-screen bg-[#F4F7F5] flex items-center justify-center font-bold text-[#1C4D2E] text-xl animate-pulse">Cargando Centro de Control...</div>;
 
   return (
-    <main className="min-h-screen flex flex-col relative transition-all duration-1000 ease-in-out bg-cover bg-center bg-fixed" style={{ backgroundImage: `url(${IMAGENES_FONDO[bgIndex]})` }}>
-      <div className="fixed inset-0 bg-black/60 z-0"></div>
+    <main className="min-h-screen bg-[#E5E9EB] p-4 md:p-6 font-sans flex flex-col gap-6 pb-24">
       
-      {(!isOnline || pendientesSync > 0) && (
-        <div className={`fixed top-0 left-0 w-full text-center py-1.5 text-[9px] md:text-[11px] font-black uppercase tracking-widest text-white z-50 transition-colors duration-500 shadow-md backdrop-blur-sm ${!isOnline ? 'bg-orange-500/90' : 'bg-blue-500/90'}`}>
-          {!isOnline ? `⚠️ Sin conexión - Trabajando localmente (${pendientesSync} pendientes)` : `🔄 Restableciendo conexión... Sincronizando ${pendientesSync} datos...`}
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-4 border-[#1C4D2E] pb-4 gap-4">
+        <div>
+          <h1 className="text-[#1C4D2E] text-3xl md:text-5xl font-black tracking-tighter">PRIMA<span className="text-[#C22821]">FLOR</span></h1>
+          <p className="text-gray-500 font-bold uppercase tracking-widest text-xs md:text-sm mt-1">Dashboard Gerencial</p>
         </div>
-      )}
+      </header>
 
-      {step === 1 && (
-        <div className="relative z-10 w-full max-w-md mx-auto flex flex-col items-center justify-center min-h-screen p-6 pb-24 pt-10">
-          <div className="mb-3 w-full text-center bg-white/90 p-4 rounded-2xl shadow-lg backdrop-blur-sm border-b-4 border-[#1C4D2E]">
-            <h1 className="text-[#1C4D2E] text-4xl font-black tracking-tighter">PRIMA<span className="text-[#C22821]">FLOR</span></h1>
-            <p className="text-gray-600 text-sm font-bold uppercase tracking-widest">Acceso Paletero</p>
+      {/* FILA 1: KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-200 border-l-8 border-l-[#1C4D2E]">
+          <p className="text-[10px] md:text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Volumen Total</p>
+          <p className="text-3xl md:text-5xl font-black text-[#1C4D2E]">{kpiTotalGavetas} <span className="text-sm text-gray-400 font-bold uppercase">Gav</span></p>
+        </div>
+        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-200 border-l-8 border-l-[#C22821]">
+          <p className="text-[10px] md:text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Palets Completados</p>
+          <p className="text-3xl md:text-5xl font-black text-[#1C4D2E]">{kpiTotalPalets} <span className="text-sm text-gray-400 font-bold uppercase">Pal</span></p>
+        </div>
+        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-200 border-l-8 border-l-blue-600">
+          <p className="text-[10px] md:text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Fuerza Laboral</p>
+          <p className="text-3xl md:text-5xl font-black text-[#1C4D2E]">{kpiTrabajadoresUnicos} <span className="text-sm text-gray-400 font-bold uppercase">Trab</span></p>
+        </div>
+        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-200 border-l-8 border-l-amber-500">
+          <p className="text-[10px] md:text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Productividad Promedio</p>
+          <p className="text-3xl md:text-5xl font-black text-[#1C4D2E]">{kpiPromedioGavetas} <span className="text-sm text-gray-400 font-bold uppercase">Gav/Trab</span></p>
+        </div>
+      </div>
+
+      {/* FILA 2: PANTALLA DE FILTROS */}
+      <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-200">
+        <div className="flex justify-between items-center mb-4 border-b pb-2">
+          <h3 className="text-[#1C4D2E] font-black text-lg md:text-xl">Panel de Filtros</h3>
+          <button onClick={limpiarFiltros} className="text-xs font-bold text-[#C22821] bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-colors border border-red-100 shadow-sm">
+            Limpiar Filtros
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Desde (Fecha)</label>
+            <input type="date" value={filtroFechaInicio} onChange={(e) => setFiltroFechaInicio(e.target.value)} className="w-full p-2.5 md:p-3 rounded-xl bg-gray-50 border-2 border-gray-200 font-bold text-[#1C4D2E] outline-none text-xs md:text-sm" />
           </div>
-          <form onSubmit={handlePaleteroSubmit} className="w-full bg-white/95 rounded-3xl shadow-2xl p-6 md:p-8 border-t-8 border-[#1C4D2E] backdrop-blur-md">
-            <h2 className="text-[#1C4D2E] font-bold text-xl mb-6 border-b pb-2">Tus Datos de Turno</h2>
-            <input type="text" placeholder="Tu Número de Nómina" required value={paletero.nomina} onChange={(e) => setPaletero({ ...paletero, nomina: e.target.value })} className="w-full p-4 rounded-xl bg-white border-2 border-gray-300 mb-4 text-center text-lg font-bold text-[#1C4D2E] outline-none focus:border-[#1C4D2E]" />
-            <input type="text" placeholder="Tu Ticket" required value={paletero.ticket} onChange={(e) => setPaletero({ ...paletero, ticket: e.target.value })} className="w-full p-4 rounded-xl bg-white border-2 border-gray-300 mb-4 text-center text-lg font-bold text-[#1C4D2E] outline-none focus:border-[#1C4D2E]" />
-            <input type="text" placeholder="Número de Pedido" required value={paletero.pedido} onChange={(e) => setPaletero({ ...paletero, pedido: e.target.value })} className="w-full p-4 rounded-xl bg-white border-2 border-gray-300 mb-4 text-center text-lg font-bold text-[#1C4D2E] outline-none focus:border-[#1C4D2E]" />
-            <label className="block text-gray-600 text-sm font-bold mb-2 mt-4">Configuración del Pedido</label>
-            <select value={paletero.configuracion.id} onChange={handleConfigChange} className="w-full p-4 rounded-xl bg-white border-2 border-[#1C4D2E] mb-2 text-sm font-bold text-[#1C4D2E] outline-none">
-              {CATALOGO_CONFIGURACIONES.map((conf) => (
-                <option key={conf.id} value={conf.id}>{conf.cliente} | {conf.cajas} CJ | {conf.palet}</option>
-              ))}
+          <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Hasta (Fecha)</label>
+            <input type="date" value={filtroFechaFin} onChange={(e) => setFiltroFechaFin(e.target.value)} className="w-full p-2.5 md:p-3 rounded-xl bg-gray-50 border-2 border-gray-200 font-bold text-[#1C4D2E] outline-none text-xs md:text-sm" />
+          </div>
+          <div className="col-span-2 lg:col-span-1">
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Por Paletero</label>
+            <select value={filtroPaletero} onChange={(e) => setFiltroPaletero(e.target.value)} className="w-full p-2.5 md:p-3 rounded-xl bg-gray-50 border-2 border-gray-200 font-bold text-[#1C4D2E] outline-none text-xs md:text-sm">
+              {paleterosUnicos.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
-            <button type="submit" className="w-full py-5 rounded-2xl bg-[#1C4D2E] text-white font-black text-xl shadow-lg mt-6 hover:bg-[#153a22] transition-colors">CONFIGURAR CUADRILLA</button>
-          </form>
+          </div>
+          <div className="col-span-1">
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Por Pedido</label>
+            <select value={filtroPedido} onChange={(e) => setFiltroPedido(e.target.value)} className="w-full p-2.5 md:p-3 rounded-xl bg-gray-50 border-2 border-gray-200 font-bold text-[#1C4D2E] outline-none text-xs md:text-sm">
+              {pedidosUnicos.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div className="col-span-1">
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Por Cliente</label>
+            <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} className="w-full p-2.5 md:p-3 rounded-xl bg-gray-50 border-2 border-[#1C4D2E] font-bold text-[#1C4D2E] outline-none shadow-sm text-xs md:text-sm">
+              {clientesUnicos.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
         </div>
-      )}
+      </div>
 
-      {step === 2 && (
-        <div className="relative z-10 flex flex-col p-4 pt-10 pb-24 max-w-2xl mx-auto w-full min-h-screen">
-          <header className="mb-6 bg-white/95 backdrop-blur-md p-4 rounded-2xl shadow-sm border-l-4 border-[#1C4D2E]">
-            <p className="text-xs text-gray-500 font-bold uppercase">Paletero en turno</p>
-            <p className="text-lg font-black text-[#1C4D2E]">Nómina: {paletero.nomina} | Pedido: {paletero.pedido}</p>
-          </header>
-          <form onSubmit={addTrabajador} className="bg-white/95 backdrop-blur-md rounded-3xl shadow-lg p-6 mb-6">
-            <h2 className="text-[#1C4D2E] font-bold text-lg mb-4 flex items-center gap-2">Agregar Trabajador</h2>
-            <div className="flex flex-col gap-4">
-              <input type="text" placeholder="Nombre completo" required value={nuevoTrab.nombre} onChange={(e) => setNuevoTrab({ ...nuevoTrab, nombre: e.target.value })} className="p-4 bg-white rounded-xl border-2 border-gray-300 font-bold outline-none text-[#1C4D2E]" />
-              <div className="flex gap-4">
-                <input type="text" placeholder="Nómina" required value={nuevoTrab.nomina} onChange={(e) => setNuevoTrab({ ...nuevoTrab, nomina: e.target.value })} className="w-1/2 p-4 bg-white rounded-xl border-2 border-gray-300 font-bold outline-none text-[#1C4D2E]" />
-                <input type="text" placeholder="Ticket" required value={nuevoTrab.ticket} onChange={(e) => setNuevoTrab({ ...nuevoTrab, ticket: e.target.value })} className="w-1/2 p-4 bg-white rounded-xl border-2 border-gray-300 font-bold outline-none text-[#1C4D2E]" />
-              </div>
-              <button type="submit" className="mt-2 py-4 bg-gray-50 border-2 border-[#1C4D2E] text-[#1C4D2E] font-black rounded-xl active:scale-95 transition-transform">AÑADIR A LA LISTA</button>
-            </div>
-          </form>
-          <div className="flex-1">
-            <h3 className="font-bold text-white mb-3 ml-2 drop-shadow-md">Tu Cuadrilla ({trabajadores.length})</h3>
-            {trabajadores.map(t => (
-              <div key={t.id} className="flex justify-between items-center bg-white/95 backdrop-blur-md p-4 rounded-xl shadow-sm mb-3 border-l-4 border-[#C22821]">
+      {/* FILA 3: SECCIÓN DE GRÁFICAS */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-200 h-[350px] md:h-[400px] w-full min-w-0 flex flex-col">
+          <h3 className="text-[#1C4D2E] font-black text-lg md:text-xl mb-4">Rendimiento por Cuadrilla</h3>
+          {datosGraficaBarras.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={datosGraficaBarras} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                <XAxis dataKey="nombre" tick={{ fill: '#6B7280', fontSize: 10, fontWeight: 'bold' }} axisLine={false} tickLine={false} angle={-45} textAnchor="end" />
+                <YAxis tick={{ fill: '#6B7280', fontSize: 10, fontWeight: 'bold' }} axisLine={false} tickLine={false} />
+                <RechartsTooltip cursor={{ fill: '#F3F4F6' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                <Bar dataKey="Gavetas" fill="#1C4D2E" radius={[6, 6, 0, 0]} barSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-gray-400 font-bold text-sm">No hay datos para graficar.</div>
+          )}
+        </div>
+
+        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-200 h-[350px] md:h-[400px] w-full min-w-0 flex flex-col">
+          <h3 className="text-[#1C4D2E] font-black text-lg md:text-xl mb-2">Distribución por Cliente</h3>
+          <p className="text-xs text-gray-400 font-bold mb-4">Porcentaje de volumen de producción</p>
+          {datosPie.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={datosPie} cx="50%" cy="45%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value" stroke="none" >
+                  {datosPie.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORES_PIE[index % COLORES_PIE.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold', color: '#4B5563' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-gray-400 font-bold text-sm">No hay datos para graficar.</div>
+          )}
+        </div>
+      </div>
+
+      {/* FILA 4: LISTADO DETALLADO */}
+      {listaCuadrillas.length === 0 ? (
+        <div className="bg-white p-10 text-center rounded-2xl shadow-sm text-gray-500 font-bold text-base md:text-xl border border-gray-200 relative">
+          No se encontraron cuadrillas con los filtros seleccionados.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative">
+          {listaCuadrillas.map((cuadrilla, index) => (
+            <div key={index} className="bg-white rounded-3xl shadow-md overflow-hidden border border-gray-200 hover:shadow-lg transition-shadow relative">
+              <div className="bg-[#1C4D2E] p-4 text-white flex justify-between items-center relative z-10">
                 <div>
-                  <p className="font-black text-[#1C4D2E] text-lg">{t.nombre}</p>
-                  <p className="text-sm text-gray-600 font-bold">Nómina: {t.nomina} | Ticket: {t.ticket}</p>
+                  <p className="text-[9px] md:text-[10px] text-green-300 font-bold uppercase tracking-wider">Paletero / Nómina</p>
+                  <p className="font-black text-xl md:text-2xl">{cuadrilla.paletero}</p>
                 </div>
-                <button onClick={() => removeTrabajador(t.id)} className="text-[#C22821] font-black px-4 py-2 bg-red-50 rounded-lg active:scale-95 transition-transform">QUITAR</button>
+                <div className="text-right">
+                  <p className="text-[9px] md:text-[10px] text-green-300 font-bold uppercase tracking-wider">Total Filtrado</p>
+                  <p className="font-black text-2xl md:text-3xl">{cuadrilla.totalGavetas}</p>
+                </div>
               </div>
-            ))}
-          </div>
-          {trabajadores.length > 0 && <button onClick={() => setStep(3)} className="w-full py-5 rounded-2xl bg-[#1C4D2E] text-white font-black text-xl mt-6 shadow-xl active:scale-95 transition-transform">INICIAR COSECHA</button>}
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="relative z-10 flex flex-col flex-1 max-w-2xl mx-auto w-full min-h-screen pt-6 md:pt-10">
-          
-          {/* CABECERA MÁS COMPACTA PARA MÓVILES */}
-          <header className="bg-[#1C4D2E]/95 backdrop-blur-md p-4 md:p-6 text-white shadow-xl rounded-b-[1.5rem] md:rounded-b-[2rem] z-20 sticky top-0 border-b border-white/10 mt-2 md:mt-0">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <p className="text-[9px] md:text-[10px] opacity-70 uppercase font-bold tracking-widest">Nómina Paletero</p>
-                <p className="font-black text-xl md:text-2xl leading-none">{paletero.nomina}</p>
-                <p className="text-[11px] md:text-xs text-green-300 font-bold mt-1">Pedido: {paletero.pedido}</p>
+              <div className="bg-[#153a22] px-4 py-2 text-white flex justify-between text-[10px] md:text-xs font-bold items-center relative z-10">
+                <span>Pedido: {cuadrilla.pedido}</span>
+                <span className="truncate ml-2 opacity-80 text-right">
+                  {cuadrilla.tiposPaletArray.length > 1 ? 'Múltiples Config.' : cuadrilla.tiposPaletArray[0]}
+                </span>
               </div>
-              <div className="flex flex-col items-end gap-1.5">
-                  <button onClick={terminarTurno} className="bg-red-600/90 hover:bg-red-700 text-white font-bold text-[10px] md:text-xs px-3 md:px-4 py-1.5 md:py-2 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3 md:w-4 md:h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
-                      SALIR
-                  </button>
-                  <div className="text-right">
-                      <p className="text-5xl md:text-6xl font-black leading-none">{totalGavetasGeneral}</p>
-                      <p className="text-[9px] md:text-[11px] text-green-300 font-bold uppercase tracking-wider mt-0.5">Gavetas Totales</p>
-                  </div>
-              </div>
-            </div>
-
-            {/* MENSAJE DE USABILIDAD (NUEVO) → */}
-            {resumenPaletsGlobales.length > 0 && (
-              <div className="text-[9px] text-green-300 font-bold uppercase mb-1 flex items-center gap-1 opacity-70">
-                → deslice
-              </div>
-            )}
-
-            {/* CARRUSEL HORIZONTAL DE PALETS */}
-            {resumenPaletsGlobales.length > 0 && (
-              <div className="mb-3 flex flex-nowrap overflow-x-auto gap-2 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                {resumenPaletsGlobales.map(res => (
-                  <div key={res.id} className="shrink-0 bg-white/10 border border-white/20 px-3 py-1.5 rounded-full flex items-center gap-2 backdrop-blur-sm">
-                    <span className="bg-[#C22821] text-white text-[9px] md:text-[10px] font-black px-2 py-0.5 rounded-full">{res.paletsCompletos} PALETS</span>
-                    <span className="text-[9px] md:text-[10px] font-bold uppercase">{res.cliente}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            <div className="bg-[#153a22]/80 p-2 md:p-3 rounded-xl border border-green-700/50 backdrop-blur-sm">
-              <p className="text-[9px] md:text-[10px] text-green-300 font-bold uppercase mb-0.5">Configuración Activa</p>
-              <select value={paletero.configuracion.id} onChange={handleConfigChange} className="w-full bg-transparent text-white font-bold text-[11px] md:text-sm outline-none cursor-pointer appearance-none truncate">
-                {CATALOGO_CONFIGURACIONES.map((conf) => (
-                  <option key={conf.id} value={conf.id} className="text-black">{conf.cliente} | {conf.cajas} Gavetas | {conf.palet}</option>
-                ))}
-              </select>
-            </div>
-          </header>
-
-          <div className="flex-1 p-3 md:p-4 flex flex-col gap-4 overflow-y-auto pt-4 pb-24">
-            {trabajadores.map(t => {
-              const configIdActual = paletero.configuracion.id;
-              const gavetasActivas = t.conteos[configIdActual] || 0;
-              const paletsTrabajador = Math.floor(gavetasActivas / paletero.configuracion.cajas);
-              const gavetasEnPaletActual = gavetasActivas % paletero.configuracion.cajas;
               
-              return (
-                <div key={t.id} className="bg-white/95 backdrop-blur-md p-3 md:p-4 rounded-3xl shadow-lg border-2 border-white/20 flex flex-col hover:shadow-xl transition-shadow relative z-10">
-                  <div className="flex items-center justify-between border-b border-gray-200 pb-3 mb-3">
-                    <div className="w-[45%]">
-                      <p className="font-black text-[#1C4D2E] leading-tight text-lg md:text-xl">{t.nombre}</p>
-                      <p className="text-[10px] md:text-[11px] text-gray-500 font-bold uppercase mt-1">Nóm: {t.nomina} | Tkt: {t.ticket}</p>
-                      {paletsTrabajador > 0 && (
-                        <div className="mt-2 inline-block bg-[#C22821] text-white text-[9px] md:text-[10px] px-2 py-1 rounded-md font-bold animate-pulse shadow-md">
-                          {paletsTrabajador} PALET(S)
+              <div className="p-4 relative z-10">
+                <h4 className="text-[10px] md:text-xs font-bold text-gray-400 uppercase mb-3 border-b pb-2">Desglose de Trabajadores (Alfabético)</h4>
+                <div className="flex flex-col gap-3">
+                  {cuadrilla.trabajadoresDetallados.map(worker => (
+                    <div key={worker.nomina} className="bg-gray-50 p-3 rounded-2xl border border-gray-200">
+                      <div className="border-b pb-2 mb-2 flex justify-between items-start">
+                        <div>
+                          <p className="font-bold text-[#1C4D2E] text-base md:text-lg leading-tight">{worker.nombre}</p>
+                          <p className="text-[9px] md:text-[10px] text-gray-500 font-bold">Nóm: {worker.nomina} | Tkt: {worker.ticket}</p>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 md:gap-2 w-[55%] justify-end">
-                      <button onClick={() => updateGavetas(t.id, -1)} className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-red-50 text-[#C22821] border-2 border-red-200 font-black text-2xl md:text-3xl active:scale-95 transition-transform">-</button>
-                      <div className="w-14 md:w-16 text-center shrink-0">
-                        <span className="text-3xl md:text-4xl font-black text-[#1C4D2E]">{gavetasEnPaletActual}</span>
-                        <span className="text-[8px] md:text-[9px] text-gray-400 font-bold uppercase block">En Palet</span>
+                        <div className="text-right">
+                          <p className="font-black text-xl text-[#1C4D2E]">
+                            {worker.produccion.reduce((sum, p) => sum + p.gavetas, 0)}
+                          </p>
+                          <p className="text-[9px] text-gray-400 font-bold uppercase">Gavetas Totales</p>
+                        </div>
                       </div>
-                      <button onClick={() => updateGavetas(t.id, 1)} className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-[#1C4D2E] text-white font-black text-3xl md:text-4xl shadow-lg active:scale-95 transition-transform">+</button>
+                      <div className="flex flex-col gap-1.5">
+                        {worker.produccion.map(p => (
+                          <div key={p.id} className="flex justify-between items-center bg-white p-2 rounded-xl border border-gray-100 text-[11px] text-[#1C4D2E] font-bold hover:bg-green-50 transition-colors">
+                            <span className="truncate w-[60%]">{p.tipo_palet}</span>
+                            <span className="w-[40%] text-right bg-green-100/80 px-2 py-1.5 rounded-lg">
+                              {p.palets} Pal / {p.gavetas} Gav
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="bg-white/50 rounded-xl p-2 md:p-3 border border-gray-100">
-                    <p className="text-[9px] md:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5 border-b border-gray-200 pb-1">Producción Acumulada</p>
-                    {Object.entries(t.conteos).map(([confId, cantidadGavetas]) => {
-                      if (cantidadGavetas === 0) return null;
-                      const configObj = CATALOGO_CONFIGURACIONES.find(c => c.id === confId);
-                      return (
-                        <div key={confId} className="flex justify-between items-center text-[10px] md:text-[11px] font-bold text-[#1C4D2E] mb-1 gap-2">
-                          <span className="truncate w-[65%] pr-1">{configObj.cliente} ({configObj.palet})</span>
-                          <span className="w-[35%] text-right bg-green-100/80 px-2 py-1 rounded-lg shrink-0">
-                            {Math.floor(cantidadGavetas / configObj.cajas)} Pal / {cantidadGavetas} Gav
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </main>

@@ -30,13 +30,10 @@ export default function Home() {
   const [trabajadores, setTrabajadores] = useState([]);
   const [nuevoTrab, setNuevoTrab] = useState({ nombre: '', nomina: '', ticket: '' });
 
-  // FASES 2 Y 3: ESTADOS DEL SENSOR DE RED Y COLA DE DATOS
   const [isOnline, setIsOnline] = useState(true);
   const [pendientesSync, setPendientesSync] = useState(0);
 
-  // EFECTO INICIAL: Recuperación Visual y Configuración de Sensores
   useEffect(() => {
-    // 1. Recuperar variables visuales de Fase 1
     const memStep = localStorage.getItem('pf_step');
     const memPaletero = localStorage.getItem('pf_paletero');
     const memTrabajadores = localStorage.getItem('pf_trabajadores');
@@ -45,14 +42,13 @@ export default function Home() {
     if (memPaletero) setPaletero(JSON.parse(memPaletero));
     if (memTrabajadores) setTrabajadores(JSON.parse(memTrabajadores));
 
-    // 2. Configurar el Sensor de Red
     setIsOnline(navigator.onLine);
     const queueGuardada = JSON.parse(localStorage.getItem('pf_sync_queue') || '[]');
     setPendientesSync(queueGuardada.length);
 
     const handleOnline = () => {
       setIsOnline(true);
-      sincronizarColaMongoDB(); // Se dispara automáticamente al volver la red
+      sincronizarColaMongoDB(); 
     };
     const handleOffline = () => setIsOnline(false);
 
@@ -67,7 +63,6 @@ export default function Home() {
     };
   }, []);
 
-  // FASE 1 CONTINUACIÓN: Guardar cambios visuales
   useEffect(() => {
     if (isLoaded) {
       localStorage.setItem('pf_step', JSON.stringify(step));
@@ -76,7 +71,6 @@ export default function Home() {
     }
   }, [step, paletero, trabajadores, isLoaded]);
 
-  // ANIMACIÓN CARRUSEL DE FONDO
   useEffect(() => {
     const intervalo = setInterval(() => {
       setBgIndex((prev) => (prev + 1) % IMAGENES_FONDO.length);
@@ -84,9 +78,6 @@ export default function Home() {
     return () => clearInterval(intervalo);
   }, []);
 
-  // -------------------------------------------------------------
-  // LÓGICA DE MOTOR OFFLINE
-  // -------------------------------------------------------------
   const encolarPeticion = (payload) => {
     const queueActual = JSON.parse(localStorage.getItem('pf_sync_queue') || '[]');
     queueActual.push(payload);
@@ -98,9 +89,7 @@ export default function Home() {
     const queueActual = JSON.parse(localStorage.getItem('pf_sync_queue') || '[]');
     if (queueActual.length === 0) return;
 
-    // Clonamos la cola para ir borrando lo que se envíe exitosamente
     const nuevaCola = [...queueActual];
-
     for (let i = 0; i < queueActual.length; i++) {
       try {
         const res = await fetch('/api/tracker', {
@@ -108,21 +97,18 @@ export default function Home() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(queueActual[i])
         });
-        
         if (res.ok) {
-          nuevaCola.shift(); // Enviado con éxito, lo borramos de la cola local
+          nuevaCola.shift(); 
         } else {
-          break; // Si el servidor rechaza, nos detenemos y probamos luego
+          break; 
         }
       } catch (err) {
-        break; // Si la red vuelve a caer en medio del proceso, nos detenemos
+        break; 
       }
     }
-
     localStorage.setItem('pf_sync_queue', JSON.stringify(nuevaCola));
     setPendientesSync(nuevaCola.length);
   };
-  // -------------------------------------------------------------
 
   const handleConfigChange = (e) => {
     const configSeleccionada = CATALOGO_CONFIGURACIONES.find(c => c.id === e.target.value);
@@ -136,7 +122,6 @@ export default function Home() {
         try {
           const respuesta = await fetch(`/api/tracker?nomina=${paletero.nomina}&pedido=${paletero.pedido}`);
           const info = await respuesta.json();
-          
           if (info.success && info.data.length > 0) {
             const cuadrillaMap = {};
             info.data.forEach(reg => {
@@ -162,7 +147,6 @@ export default function Home() {
     let trabajadorActualizado = null;
     let gavetasActualesCalculadas = 0;
     
-    // 1. Actualizamos la pantalla instantáneamente (sin esperar a la red)
     setTrabajadores(trabajadores.map(t => {
       if (t.id === id) {
         const gavetasAnteriores = t.conteos[configIdActual] || 0;
@@ -176,7 +160,6 @@ export default function Home() {
       return t;
     }));
     
-    // 2. Intentamos enviar a MongoDB o lo encolamos si no hay red
     if (trabajadorActualizado) {
       const payloadEnvio = { 
         paletero: { ...paletero, tipoPalet: paletero.configuracion.palet }, 
@@ -186,18 +169,14 @@ export default function Home() {
       };
 
       try {
-        if (!navigator.onLine) throw new Error("Offline_Trigger"); // Si detecta que no hay red, salta al Catch
-        
+        if (!navigator.onLine) throw new Error("Offline_Trigger"); 
         const res = await fetch('/api/tracker', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payloadEnvio),
         });
-
         if (!res.ok) throw new Error("Server_Error");
-
       } catch (error) { 
-        // Si falló el Fetch o detectó Offline, empujamos a la cola de espera
         encolarPeticion(payloadEnvio);
       }
     }
@@ -218,7 +197,6 @@ export default function Home() {
     if (pendientesSync > 0) {
       return alert("⚠️ Tienes datos sin guardar en la nube. Conéctate a internet para sincronizar antes de cerrar el turno.");
     }
-
     if (window.confirm("¿Estás seguro de salir y cerrar este turno?")) {
       setStep(1); 
       setTrabajadores([]); 
@@ -230,7 +208,6 @@ export default function Home() {
     }
   };
 
-  // CÁLCULOS GLOBALES
   const totalGavetasGeneral = trabajadores.reduce((acc, curr) => {
     return acc + Object.values(curr.conteos).reduce((sum, val) => sum + val, 0);
   }, 0);
@@ -247,14 +224,12 @@ export default function Home() {
     <main className="min-h-screen flex flex-col relative transition-all duration-1000 ease-in-out bg-cover bg-center bg-fixed" style={{ backgroundImage: `url(${IMAGENES_FONDO[bgIndex]})` }}>
       <div className="fixed inset-0 bg-black/60 z-0"></div>
       
-      {/* --- TELEMETRÍA VISUAL (BANNER DE CONEXIÓN) --- */}
       {(!isOnline || pendientesSync > 0) && (
         <div className={`fixed top-0 left-0 w-full text-center py-1.5 text-[9px] md:text-[11px] font-black uppercase tracking-widest text-white z-50 transition-colors duration-500 shadow-md backdrop-blur-sm ${!isOnline ? 'bg-orange-500/90' : 'bg-blue-500/90'}`}>
           {!isOnline ? `⚠️ Sin conexión - Trabajando localmente (${pendientesSync} pendientes)` : `🔄 Restableciendo conexión... Sincronizando ${pendientesSync} datos...`}
         </div>
       )}
 
-      {/* VISTA 1: ACCESO */}
       {step === 1 && (
         <div className="relative z-10 w-full max-w-md mx-auto flex flex-col items-center justify-center min-h-screen p-6 pb-24 pt-10">
           <div className="mb-3 w-full text-center bg-white/90 p-4 rounded-2xl shadow-lg backdrop-blur-sm border-b-4 border-[#1C4D2E]">
@@ -277,7 +252,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* VISTA 2: CONFIGURAR CUADRILLA */}
       {step === 2 && (
         <div className="relative z-10 flex flex-col p-4 pt-10 pb-24 max-w-2xl mx-auto w-full min-h-screen">
           <header className="mb-6 bg-white/95 backdrop-blur-md p-4 rounded-2xl shadow-sm border-l-4 border-[#1C4D2E]">
@@ -311,42 +285,51 @@ export default function Home() {
         </div>
       )}
 
-      {/* VISTA 3: TRACKER */}
       {step === 3 && (
-        <div className="relative z-10 flex flex-col flex-1 max-w-2xl mx-auto w-full min-h-screen pt-6">
-          <header className="bg-[#1C4D2E]/95 backdrop-blur-md p-6 text-white shadow-xl rounded-b-[2rem] z-20 sticky top-0 border-b border-white/10 mt-2 md:mt-0">
-            <div className="flex justify-between items-start mb-4">
+        <div className="relative z-10 flex flex-col flex-1 max-w-2xl mx-auto w-full min-h-screen pt-6 md:pt-10">
+          
+          {/* CABECERA MÁS COMPACTA PARA MÓVILES */}
+          <header className="bg-[#1C4D2E]/95 backdrop-blur-md p-4 md:p-6 text-white shadow-xl rounded-b-[1.5rem] md:rounded-b-[2rem] z-20 sticky top-0 border-b border-white/10 mt-2 md:mt-0">
+            <div className="flex justify-between items-start mb-3">
               <div>
-                <p className="text-[10px] opacity-70 uppercase font-bold tracking-widest">Nómina Paletero</p>
-                <p className="font-black text-2xl leading-none">{paletero.nomina}</p>
-                <p className="text-xs text-green-300 font-bold mt-1.5">Pedido: {paletero.pedido}</p>
+                <p className="text-[9px] md:text-[10px] opacity-70 uppercase font-bold tracking-widest">Nómina Paletero</p>
+                <p className="font-black text-xl md:text-2xl leading-none">{paletero.nomina}</p>
+                <p className="text-[11px] md:text-xs text-green-300 font-bold mt-1">Pedido: {paletero.pedido}</p>
               </div>
-              <div className="flex flex-col items-end gap-2">
-                  <button onClick={terminarTurno} className="bg-red-600/90 hover:bg-red-700 text-white font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
+              <div className="flex flex-col items-end gap-1.5">
+                  <button onClick={terminarTurno} className="bg-red-600/90 hover:bg-red-700 text-white font-bold text-[10px] md:text-xs px-3 md:px-4 py-1.5 md:py-2 rounded-lg flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3 md:w-4 md:h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
                       SALIR
                   </button>
                   <div className="text-right">
-                      <p className="text-6xl font-black leading-none">{totalGavetasGeneral}</p>
-                      <p className="text-xs text-green-300 font-bold uppercase tracking-wider mt-1">Gavetas Totales</p>
+                      <p className="text-5xl md:text-6xl font-black leading-none">{totalGavetasGeneral}</p>
+                      <p className="text-[9px] md:text-[11px] text-green-300 font-bold uppercase tracking-wider mt-0.5">Gavetas Totales</p>
                   </div>
               </div>
             </div>
 
+            {/* MENSAJE DE USABILIDAD (NUEVO) → */}
             {resumenPaletsGlobales.length > 0 && (
-              <div className="mb-4 flex flex-wrap gap-2">
+              <div className="text-[9px] text-green-300 font-bold uppercase mb-1 flex items-center gap-1 opacity-70">
+                → deslice
+              </div>
+            )}
+
+            {/* CARRUSEL HORIZONTAL DE PALETS */}
+            {resumenPaletsGlobales.length > 0 && (
+              <div className="mb-3 flex flex-nowrap overflow-x-auto gap-2 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {resumenPaletsGlobales.map(res => (
-                  <div key={res.id} className="bg-white/10 border border-white/20 px-3 py-1.5 rounded-full flex items-center gap-2 backdrop-blur-sm">
-                    <span className="bg-[#C22821] text-white text-[10px] font-black px-2 py-0.5 rounded-full">{res.paletsCompletos} PALETS</span>
-                    <span className="text-[10px] font-bold uppercase truncate max-w-[100px]">{res.cliente}</span>
+                  <div key={res.id} className="shrink-0 bg-white/10 border border-white/20 px-3 py-1.5 rounded-full flex items-center gap-2 backdrop-blur-sm">
+                    <span className="bg-[#C22821] text-white text-[9px] md:text-[10px] font-black px-2 py-0.5 rounded-full">{res.paletsCompletos} PALETS</span>
+                    <span className="text-[9px] md:text-[10px] font-bold uppercase">{res.cliente}</span>
                   </div>
                 ))}
               </div>
             )}
             
-            <div className="bg-[#153a22]/80 p-3 rounded-xl border border-green-700/50 backdrop-blur-sm">
-              <p className="text-[10px] text-green-300 font-bold uppercase mb-1">Configuración Activa (Selector)</p>
-              <select value={paletero.configuracion.id} onChange={handleConfigChange} className="w-full bg-transparent text-white font-bold text-sm outline-none cursor-pointer appearance-none">
+            <div className="bg-[#153a22]/80 p-2 md:p-3 rounded-xl border border-green-700/50 backdrop-blur-sm">
+              <p className="text-[9px] md:text-[10px] text-green-300 font-bold uppercase mb-0.5">Configuración Activa</p>
+              <select value={paletero.configuracion.id} onChange={handleConfigChange} className="w-full bg-transparent text-white font-bold text-[11px] md:text-sm outline-none cursor-pointer appearance-none truncate">
                 {CATALOGO_CONFIGURACIONES.map((conf) => (
                   <option key={conf.id} value={conf.id} className="text-black">{conf.cliente} | {conf.cajas} Gavetas | {conf.palet}</option>
                 ))}
@@ -354,7 +337,7 @@ export default function Home() {
             </div>
           </header>
 
-          <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto pt-6 pb-24">
+          <div className="flex-1 p-3 md:p-4 flex flex-col gap-4 overflow-y-auto pt-4 pb-24">
             {trabajadores.map(t => {
               const configIdActual = paletero.configuracion.id;
               const gavetasActivas = t.conteos[configIdActual] || 0;
@@ -362,36 +345,36 @@ export default function Home() {
               const gavetasEnPaletActual = gavetasActivas % paletero.configuracion.cajas;
               
               return (
-                <div key={t.id} className="bg-white/95 backdrop-blur-md p-4 rounded-3xl shadow-lg border-2 border-white/20 flex flex-col hover:shadow-xl transition-shadow relative z-10">
-                  <div className="flex items-center justify-between border-b border-gray-200 pb-4 mb-4">
+                <div key={t.id} className="bg-white/95 backdrop-blur-md p-3 md:p-4 rounded-3xl shadow-lg border-2 border-white/20 flex flex-col hover:shadow-xl transition-shadow relative z-10">
+                  <div className="flex items-center justify-between border-b border-gray-200 pb-3 mb-3">
                     <div className="w-[45%]">
-                      <p className="font-black text-[#1C4D2E] leading-tight text-xl">{t.nombre}</p>
-                      <p className="text-[11px] text-gray-500 font-bold uppercase mt-1">Nóm: {t.nomina} | Tkt: {t.ticket}</p>
+                      <p className="font-black text-[#1C4D2E] leading-tight text-lg md:text-xl">{t.nombre}</p>
+                      <p className="text-[10px] md:text-[11px] text-gray-500 font-bold uppercase mt-1">Nóm: {t.nomina} | Tkt: {t.ticket}</p>
                       {paletsTrabajador > 0 && (
-                        <div className="mt-2 inline-block bg-[#C22821] text-white text-[10px] px-2 py-1 rounded-md font-bold animate-pulse shadow-md">
-                          {paletsTrabajador} PALET(S) COMPLETOS
+                        <div className="mt-2 inline-block bg-[#C22821] text-white text-[9px] md:text-[10px] px-2 py-1 rounded-md font-bold animate-pulse shadow-md">
+                          {paletsTrabajador} PALET(S)
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 w-[55%] justify-end">
-                      <button onClick={() => updateGavetas(t.id, -1)} className="w-14 h-14 rounded-2xl bg-red-50 text-[#C22821] border-2 border-red-200 font-black text-3xl active:scale-95 transition-transform">-</button>
-                      <div className="w-16 text-center shrink-0">
-                        <span className="text-4xl font-black text-[#1C4D2E]">{gavetasEnPaletActual}</span>
-                        <span className="text-[9px] text-gray-400 font-bold uppercase block">En Palet</span>
+                    <div className="flex items-center gap-1.5 md:gap-2 w-[55%] justify-end">
+                      <button onClick={() => updateGavetas(t.id, -1)} className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-red-50 text-[#C22821] border-2 border-red-200 font-black text-2xl md:text-3xl active:scale-95 transition-transform">-</button>
+                      <div className="w-14 md:w-16 text-center shrink-0">
+                        <span className="text-3xl md:text-4xl font-black text-[#1C4D2E]">{gavetasEnPaletActual}</span>
+                        <span className="text-[8px] md:text-[9px] text-gray-400 font-bold uppercase block">En Palet</span>
                       </div>
-                      <button onClick={() => updateGavetas(t.id, 1)} className="w-16 h-16 rounded-2xl bg-[#1C4D2E] text-white font-black text-4xl shadow-lg active:scale-95 transition-transform">+</button>
+                      <button onClick={() => updateGavetas(t.id, 1)} className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-[#1C4D2E] text-white font-black text-3xl md:text-4xl shadow-lg active:scale-95 transition-transform">+</button>
                     </div>
                   </div>
 
-                  <div className="bg-white/50 rounded-xl p-3 border border-gray-100">
-                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2 border-b border-gray-200 pb-1">Producción Acumulada</p>
+                  <div className="bg-white/50 rounded-xl p-2 md:p-3 border border-gray-100">
+                    <p className="text-[9px] md:text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1.5 border-b border-gray-200 pb-1">Producción Acumulada</p>
                     {Object.entries(t.conteos).map(([confId, cantidadGavetas]) => {
                       if (cantidadGavetas === 0) return null;
                       const configObj = CATALOGO_CONFIGURACIONES.find(c => c.id === confId);
                       return (
-                        <div key={confId} className="flex justify-between items-center text-[11px] font-bold text-[#1C4D2E] mb-1.5 gap-2">
+                        <div key={confId} className="flex justify-between items-center text-[10px] md:text-[11px] font-bold text-[#1C4D2E] mb-1 gap-2">
                           <span className="truncate w-[65%] pr-1">{configObj.cliente} ({configObj.palet})</span>
-                          <span className="w-[35%] text-right bg-green-100/80 px-2.5 py-1.5 rounded-lg shrink-0">
+                          <span className="w-[35%] text-right bg-green-100/80 px-2 py-1 rounded-lg shrink-0">
                             {Math.floor(cantidadGavetas / configObj.cajas)} Pal / {cantidadGavetas} Gav
                           </span>
                         </div>
