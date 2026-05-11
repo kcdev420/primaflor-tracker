@@ -140,7 +140,16 @@ export default function SupervisorDashboard() {
   const limpiarFiltros = () => { setFiltroFechaInicio(''); setFiltroFechaFin(''); setFiltroPaletero('TODOS'); setFiltroPedido('TODOS'); setFiltroCliente('TODOS'); };
 
   const kpiTotalGavetas = datosFiltrados.reduce((acc, curr) => acc + curr.gavetas, 0);
-  const kpiTotalPalets = datosFiltrados.reduce((acc, curr) => acc + (curr.palets || 0), 0);
+
+  const kpiTotalPalets = CATALOGO_CONFIGURACIONES.reduce((total, conf) => {
+    // Sumamos todas las gavetas de todos los trabajadores para este tipo de palet
+    const gavetasTipo = datosFiltrados
+      .filter(d => d.tipo_palet === conf.palet_db || d.tipo_palet === conf.palet)
+      .reduce((sum, d) => sum + d.gavetas, 0);
+    // Calculamos los palets en equipo y los sumamos al total general
+    return total + Math.floor(gavetasTipo / conf.cajas);
+  }, 0);
+  
   const kpiTrabajadoresUnicos = new Set(datosFiltrados.map(d => d.trabajador_nomina)).size;
   const kpiPromedioGavetas = kpiTrabajadoresUnicos > 0 ? Math.round(kpiTotalGavetas / kpiTrabajadoresUnicos) : 0;
 
