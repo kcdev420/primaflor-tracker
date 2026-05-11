@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 const RegistroPaletSchema = new mongoose.Schema({
+  paletero_nombre: { type: String },
   paletero_nomina: { type: String, required: true },
   pedido: { type: String, required: true },
   tipo_palet: { type: String, required: true },

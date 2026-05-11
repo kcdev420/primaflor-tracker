@@ -18,6 +18,7 @@ export async function POST(request) {
       },
       {
         $set: {
+          paletero_nombre: paletero.nombre,
           trabajador_nombre: trabajador.nombre,
           trabajador_ticket: trabajador.ticket,
           gavetas: gavetasActuales,
